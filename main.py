@@ -1,5 +1,6 @@
 import asyncio
 from os import getenv
+
 from openai import OpenAI, api_key
 from dotenv import load_dotenv
 import discord
@@ -64,6 +65,49 @@ SYSTEM_PROMPT = (
 async def on_ready():
     print(f"{bot.user} is online and ready to help CS students!")
 
+#gets the conversation context for a user in a channel, so it can keep a short term memory of the conversation to better help them answer questions
+def get_conversation_context(user_id: str, channel_id: str, limit: int = 10):
+    #fetch last limit messages (user + bot) for this user in this  channel, return in chronological order
+    cursor = (
+        db.acm_discord.find(
+            {
+                "user_id": {"$in": [user_id, str(bot.user.id)]},
+                "channel_id": channel_id
+            }
+        )
+        .sort("timestamp", -1)
+        .limit(limit)
+    )
+
+    #reverse so they go from oldes to newest
+    history = list(cursor)[::-1]
+    print(f"THIS IS THE MESSAGE HISTORY FOR USER {user_id} + {history}")
+    return history
+
+#formats the conversation context for openai so it will actually be able to read it
+def format_history_for_openai(history):
+    formatted = []
+    for doc in history:
+        #map each message type -> openAI role
+        if doc["message_type"] == "user":
+            role = "user"
+            content_type = "input_text"
+        else:
+            role = "assistant"
+            content_type = "output_text"
+
+        formatted.append({
+            "role": role,
+            "content": [{
+                "type": content_type,
+                "text": doc["message"]
+            }
+            ]
+        })
+
+    return formatted
+
+
 #what will happen when a user sends a message mentioning the bot or via !tutor
 @bot.event
 async def on_message(message):
@@ -88,11 +132,31 @@ async def on_message(message):
             }
             db.acm_discord.insert_one(user_message_doc)
 
-            #ask open ai for a reply
+            #fetch previous history
+            history_docs = get_conversation_context(str(message.author.id), str(message.channel.id))
+            #conver to openai messages
+            history_msgs = format_history_for_openai(history_docs)
+
+            #build fulll input
+            input_messages =[]
+            input_messages.append({
+                "role": "system",
+                "content": [
+                    {"type": "input_text", "text": SYSTEM_PROMPT}
+                ]
+            })
+            input_messages.extend(history_msgs)
+            input_messages.append({
+                "role": "user",
+                "content": [{
+                    "type": "input_text", "text": user_input
+                }]
+            })
+
+            #ask open ai for a reply, with memory hopefully
             response = client.responses.create(
                 model="gpt-5-mini",
-                instructions=SYSTEM_PROMPT,
-                input= message.content
+                input=input_messages,
             )
 
             #store openai model response in mongodb
