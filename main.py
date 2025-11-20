@@ -7,7 +7,10 @@ from discord.ext import commands
 from datetime import datetime
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import logging
+from logging.handlers import RotatingFileHandler
 import sys
+import time
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -37,6 +40,23 @@ db.client.admin.command('ping')
 intents = discord.Intents.default()
 intents.message_content = True #needed to read user messages
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+#creates logger
+logger = logging.getLogger('discord_bot_logger')
+logger.setLevel(logging.INFO) #log level
+
+#create file handle which roatates log after 1 mb, keeping 3 backups
+handler = RotatingFileHandler(
+    "app.log", #file name
+    maxBytes=1_000_000, #max size in bytes before we rotate
+    backupCount=3 #how any old log files to keep
+)
+
+#formatting
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+logger.addHandler(handler)
 
 messages = []
 SYSTEM_PROMPT = (
@@ -98,14 +118,14 @@ def format_history_for_openai(history):
 #what will happen when a user sends a message mentioning the bot or via !tutor
 @bot.event
 async def on_message(message):
-
+    start_time = time.perf_counter()
     #ignore self messages
     if message.author == bot.user:
         return
     #respond when @ or via !tutor
     if bot.user and (bot.user.mentioned_in(message) or message.content.startswith("!tutor")):
         user_input = message.content.replace(bot.user.mention, "").strip()
-        print(user_input)
+        logger.info(f"{message.author} said: {user_input}")
 
         try:
             #store user message in mongodb
@@ -168,9 +188,13 @@ async def on_message(message):
                 await asyncio.sleep(typing_time)
 
             await message.reply(response.output_text)
-            print(response.output_text)
+            end_time = time.perf_counter()
+            logger.info(f"{bot.user} said: {response.output_text}")
+            elapse_time = end_time - start_time
+            logger.info(f"Time taken: {elapse_time:.4f} seconds")
         except Exception as e:
             print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             await message.reply("i forgor \U0001F480")
 
 bot.run(DISCORD_TOKEN)
