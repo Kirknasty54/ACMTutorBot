@@ -7,6 +7,14 @@ from discord.ext import commands
 from datetime import datetime
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception as e:
+        print(f"Error: {e}")
 
 #load up environment variables
 load_dotenv()
