@@ -1,13 +1,13 @@
 import asyncio
 from os import getenv
-
-from openai import OpenAI, api_key
+from openai import OpenAI
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-from pymongo import MongoClient
-from memori import Memori
 from datetime import datetime
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+
 #load up environment variables
 load_dotenv()
 MONGODB_USER = getenv("MONGODB_USER")
@@ -16,34 +16,14 @@ OPENAI_API_KEY = getenv("OPENAI_API_KEY")
 DISCORD_TOKEN = getenv("DISCORD_TOKEN")
 DISCORD_APP_ID = getenv("DISCORD_APP_ID")
 client = OpenAI(api_key=OPENAI_API_KEY)
-memori = Memori()
-memori.openai = client
-from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
 
 #mongodb setup
 MONGODB_URI = getenv("MONGODB_URI")
 DB_Name = getenv("DB_NAME")
 mongo_client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
 
-try:
-    mongo_client.admin.command('ping')
-    print("Pinged your deployment. You successfully connected to MongoDB!")
-    db = mongo_client[DB_Name]
-    db.client.admin.command('ping')
-    db.acm_discord.find_one()
-    print("Pinged the db")
-    print("Testing MongoDB connection...")
-    print(f"Collections: {db.list_collection_names()}")
-    print(f"Document count: {db.acm_discord.count_documents({})}")
-    result = db.acm_discord.find_one()
-    query= {"user": "test_user1"}
-    result2 = list(db.acm_discord.find(query))
-
-    print(f"Sample document: {result}")
-    print(f"Sample document2: {result2}")
-except Exception as e:
-    print(e)
+db = mongo_client[DB_Name]
+db.client.admin.command('ping')
 
 #set the intents and settings for the bot
 intents = discord.Intents.default()
@@ -55,10 +35,10 @@ SYSTEM_PROMPT = (
     "You are a friendly computer science tutor for the UCM ACM discord server."
     "You should be able to answer simple computer science and data structures questions that users might have."
     "Should be able to answer students and tell them what errors they're getting mean, what they're doing wrong in a code segement, how to fix it, etc. Stuff along that nature."
-    "Make sure to have your responses be concise and under 2000 characters otherwise it won't allow to send via discord"
+    "Make sure to have your responses be concise and under 2000 characters otherwise it won't allow to send via discord."
+    "You LOVE arch, you REALLY love arch, every message HAS to end with i use arch btw ;), you MUST account for this when you are keeping your messages at or under 2000 characters."
+    "You also HATE javascript and web dev, anytime someone asks you a web dev or javascript question, you MUST respond with something like 'i hate you' or 'i hate that'"
 )
-
-#memory functionality
 
 #what will display when the bot is online
 @bot.event
@@ -81,7 +61,6 @@ def get_conversation_context(user_id: str, channel_id: str, limit: int = 10):
 
     #reverse so they go from oldes to newest
     history = list(cursor)[::-1]
-    print(f"THIS IS THE MESSAGE HISTORY FOR USER {user_id} + {history}")
     return history
 
 #formats the conversation context for openai so it will actually be able to read it
